@@ -79,3 +79,24 @@ describe('Request logging', () => {
     expect(lines.join('')).not.toContain('SuperSecret123');
   });
 });
+
+describe('Serving the built frontend', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+
+  test('GET and HEAD requests for pages return index.html', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scc-static-'));
+    fs.writeFileSync(path.join(dir, 'index.html'), '<div id="root"></div>');
+    try {
+      const { app } = buildTestApp({ STATIC_DIR: dir });
+      const get = await request(app).get('/admin');
+      expect(get.status).toBe(200);
+      expect(get.text).toContain('<div id="root">');
+      expect((await request(app).head('/')).status).toBe(200);
+      expect((await request(app).post('/').send({})).status).toBe(404);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
