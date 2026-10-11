@@ -1,0 +1,58 @@
+# Runs the production Docker image locally against DynamoDB Local, so the
+# real DynamoDB code path can be tested without an AWS account.
+#
+#   echo "JWT_SECRET=$(openssl rand -hex 32)" > .env   # once; .env is git-ignored
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Create an administrator inside the running stack (the password is typed
+# hidden and passed through the environment, so it stays out of shell history):
+#   read -rs -p "Admin password: " ADMIN_PASSWORD; export ADMIN_PASSWORD; echo
+#   docker compose exec -e ADMIN_NAME="Campus Admin" -e ADMIN_EMAIL=admin@example.edu \
+#     -e ADMIN_PASSWORD app node scripts/create-admin.js
+#
+# The AWS keys below are dummy values: DynamoDB Local requires *some*
+# credentials but never checks them. They are not real secrets.
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data
+    user: root
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    ports:
+      - "8000:8000"
+
+  create-tables:
+    build: .
+    command: ["node", "scripts/create-tables.js"]
+    environment: &db-env
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      USERS_TABLE: scc-users
+      COMPLAINTS_TABLE: scc-complaints
+    depends_on:
+      - dynamodb-local
+    restart: on-failure
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      DB_DRIVER: dynamodb
+      JWT_SECRET: ${JWT_SECRET:?Create .env with JWT_SECRET (see the comment at the top of docker-compose.yml)}
+      # http://localhost is not HTTPS, so cookies must not be marked Secure.
+      COOKIE_SECURE: "false"
+      LOG_LEVEL: info
+    depends_on:
+      create-tables:
+        condition: service_completed_successfully
+
+volumes:
+  dynamodb-data:

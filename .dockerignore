@@ -1,0 +1,18 @@
+# Keep the Docker build context small and free of secrets.
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+backend/data
+backend/tests
+.git
+.github
+docs
+infrastructure
+*.md
+*.zip
+deploy
+docker-compose.yml
+.DS_Store
