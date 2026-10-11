@@ -47,7 +47,9 @@ function loadConfig(env = process.env) {
     isProduction,
     isTest,
     port: Number.parseInt(env.PORT || '8080', 10),
-    appVersion: env.APP_VERSION || 'dev',
+    // APP_VERSION is set by the CI Docker build; on Render the image is built
+    // by Render, which provides the deployed commit as RENDER_GIT_COMMIT.
+    appVersion: env.APP_VERSION || env.RENDER_GIT_COMMIT || 'dev',
     logLevel: env.LOG_LEVEL || (isTest ? 'silent' : 'info'),
     jwtSecret,
     jwtExpiresIn: env.JWT_EXPIRES_IN || '8h',

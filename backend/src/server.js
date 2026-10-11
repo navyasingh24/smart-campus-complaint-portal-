@@ -6,8 +6,9 @@ const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { createStore } = require('./db');
 const { createApp } = require('./app');
+const { ensureBootstrapAdmin } = require('./bootstrapAdmin');
 
-function main() {
+async function main() {
   let config;
   try {
     config = loadConfig();
@@ -22,6 +23,7 @@ function main() {
   }
 
   const store = createStore(config.db);
+  await ensureBootstrapAdmin(store, process.env, logger);
   const app = createApp({ config, store, logger });
 
   const server = app.listen(config.port, '0.0.0.0', () => {
@@ -33,7 +35,7 @@ function main() {
     });
   });
 
-  // Elastic Beanstalk and Docker send SIGTERM when stopping the container.
+  // Render and Docker send SIGTERM when stopping the container.
   // Finish in-flight requests before exiting.
   const shutdown = (signal) => {
     logger.info('shutting down', { signal });

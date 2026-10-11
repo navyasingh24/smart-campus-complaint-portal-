@@ -1,18 +1,18 @@
-# Smart Campus Complaint Management System with AWS Cloud Automation and CI/CD
+# Smart Campus Complaint Management System with Docker, CI/CD and Cloud Deployment
 
 A full-stack web application where college students report campus problems
 (Wi-Fi, classrooms, hostel, electricity, sanitation, …) and administrators track
-and resolve them. Every push to `main` is tested, packaged as a Docker image and
-deployed to AWS Elastic Beanstalk by GitHub Actions, then verified through a
-health-check endpoint.
+and resolve them. Every push to `main` is tested and packaged as a Docker image
+by GitHub Actions. **Only if all tests pass** is it deployed to
+[Render](https://render.com) and then checked through its health endpoint.
 
 ```
 Developer ──git push──▶ GitHub ──▶ GitHub Actions
                                     │ CI: npm test ─▶ frontend build ─▶ docker build ─▶ container smoke test
-                                    │ CD (main only): OIDC login ─▶ push image to ECR ─▶ deploy to Elastic Beanstalk
-                                    ▼                                                   ─▶ GET /api/health (version check)
-                     AWS: Elastic Beanstalk (EC2 + Docker) ──IAM role──▶ DynamoDB
-                                    └── logs ──▶ CloudWatch Logs
+                                    │ CD (main only, after CI passes): Render deploy hook
+                                    ▼
+                     Render (free web service): builds the Dockerfile ─▶ runs the container over HTTPS
+                                    └── pipeline waits until /api/health reports the new commit
 ```
 
 ## Features
@@ -31,15 +31,14 @@ Developer ──git push──▶ GitHub ──▶ GitHub Actions
 | --- | --- |
 | Frontend | React 19 + Vite, React Router, plain CSS |
 | Backend | Node.js 24 (works on 22+), Express 5 |
-| Database | Amazon DynamoDB (production), local JSON-file adapter or DynamoDB Local (development) |
+| Database | Built-in JSON-file adapter (local and Render); Amazon DynamoDB adapter (optional, tested with DynamoDB Local) |
 | Auth | bcrypt password hashing, JWT in an httpOnly, SameSite=Strict cookie, role-based access control |
 | Testing | Jest, Supertest, aws-sdk-client-mock |
 | Packaging | Docker (multi-stage image), Docker Compose |
-| CI/CD | GitHub Actions, GitHub OIDC → AWS IAM role |
-| Cloud | AWS Elastic Beanstalk (Docker on Amazon Linux 2023), Amazon ECR, DynamoDB, IAM, CloudWatch Logs |
-| Infrastructure as code | AWS CloudFormation (`infrastructure/cloudformation.yml`) |
+| CI/CD | GitHub Actions (CI on every push/PR, CD to Render after tests pass) |
+| Hosting | Render free web service, Docker runtime, HTTPS (`render.yaml` Blueprint) |
 
-## Quick start (local, no AWS account needed)
+## Quick start (local development, no cloud account needed)
 
 Requires Node.js 22 or newer. Full macOS instructions are in [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
 
@@ -65,11 +64,85 @@ ADMIN_NAME="Campus Admin" ADMIN_EMAIL=admin@example.edu npm run create-admin
 cd backend && npm test
 ```
 
+## Build and run with Docker
+
+The `Dockerfile` builds the React app and packages it with the backend into
+one image. Render uses the same file.
+
+```bash
+# 1. Build the image (from the repository root)
+docker build -t smart-campus:local .
+
+# 2. Run it (open http://localhost:8080)
+docker run --rm -p 8080:8080 \
+  -e NODE_ENV=production \
+  -e DB_DRIVER=local -e LOCAL_DB_FILE=/app/data/local-db.json \
+  -e COOKIE_SECURE=false \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
+  -e ADMIN_EMAIL=admin@example.edu -e ADMIN_PASSWORD='choose-a-long-password1' \
+  -v smart-campus-data:/app/data \
+  smart-campus:local
+
+# 3. Check it
+curl http://localhost:8080/api/health
+
+# Rebuild after code changes
+docker build -t smart-campus:local .
+```
+
+* `-v smart-campus-data:/app/data` keeps the data between container restarts.
+* `ADMIN_EMAIL` / `ADMIN_PASSWORD` are optional. When set, an administrator is
+  created at start-up if it doesn't exist (password: at least 12 characters with
+  a letter and a number). Without them, use `npm run create-admin`.
+* `COOKIE_SECURE=false` is needed only because `http://localhost` is not HTTPS.
+* To test with a DynamoDB-compatible database instead, use `docker compose up --build`
+  (see [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md)).
+
+## Deploy to Render (free)
+
+Full guide with screenshots-to-take, limitations and troubleshooting:
+[docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md). In short:
+
+1. **Create the service.** Sign up at https://render.com with GitHub, then
+   **New → Blueprint**, choose this repository, and Render reads `render.yaml`.
+   Enter `ADMIN_EMAIL` and `ADMIN_PASSWORD` when asked, then **Apply**.
+2. **Environment variables.** These are set by `render.yaml`:
+
+   | Variable | Value | Notes |
+   | --- | --- | --- |
+   | `NODE_ENV` | `production` | |
+   | `DB_DRIVER` | `local` | JSON-file database |
+   | `LOCAL_DB_FILE` | `/app/data/local-db.json` | |
+   | `COOKIE_SECURE` | `true` | Render serves HTTPS |
+   | `JWT_SECRET` | generated by Render | Secret; never in Git |
+   | `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | your values | Password is secret |
+   | `PORT`, `RENDER_GIT_COMMIT` | set automatically by Render | |
+3. **Live URL.** When the service is **Live**, copy its URL from the top of
+   the service page, e.g. `https://smart-campus-complaint-portal.onrender.com`.
+   Check `https://<your-app>.onrender.com/api/health`.
+4. **Connect the pipeline.** GitHub → Settings → Secrets and variables → Actions:
+   * Secret `RENDER_DEPLOY_HOOK_URL` = Render → service → Settings → **Deploy Hook**
+   * Variable `RENDER_APP_URL` = your live URL
+
+   Then create the environment **Settings → Environments → `production`**,
+   restricted to the `main` branch.
+5. **Deploy.** Push to `main`. GitHub Actions runs the tests and the Docker smoke
+   test, calls the deploy hook only if they pass, and waits until the live
+   `/api/health` reports the new commit.
+
+**Free-plan limitations:** the service sleeps after 15 minutes without traffic,
+so the first request then takes about a minute. It has **no persistent disk**,
+so complaints and student accounts are **reset** on every restart, redeploy or
+sleep. The admin account is recreated automatically from the environment
+variables. There's no shell access, and 750 free instance hours per month.
+For permanent data you need a paid instance with a persistent disk mounted at
+`/app/data` (no code change). See the guide for details.
+
 ## Repository structure
 
 ```
 .
-├── .github/workflows/ci-cd.yml    CI (tests, build, Docker smoke test) and CD (deploy to AWS)
+├── .github/workflows/ci-cd.yml    CI (tests, build, Docker smoke test) and CD (deploy to Render)
 ├── backend/
 │   ├── src/
 │   │   ├── server.js              Entry point: config, database adapter, start listening
@@ -77,11 +150,12 @@ cd backend && npm test
 │   │   ├── config.js              Environment-variable configuration
 │   │   ├── constants.js           Roles, categories, statuses
 │   │   ├── errors.js              Safe, client-facing error types
-│   │   ├── logger.js              JSON logs to stdout (→ CloudWatch)
+│   │   ├── bootstrapAdmin.js      Optional admin creation from environment variables
+│   │   ├── logger.js              JSON logs to stdout (→ Render logs)
 │   │   ├── validation.js          Server-side input validation
 │   │   ├── middleware/            auth (JWT + roles), request logging, error handling
 │   │   ├── routes/                health, auth, complaints (student), admin
-│   │   └── db/                    localStore (dev/tests), dynamoStore (AWS), table definitions
+│   │   └── db/                    localStore (JSON file), dynamoStore (DynamoDB, optional), table definitions
 │   ├── scripts/                   create-admin, create-tables (DynamoDB Local)
 │   ├── tests/                     Jest + Supertest test suites
 │   └── .env.example
@@ -93,13 +167,10 @@ cd backend && npm test
 │   │   ├── AuthContext.jsx        Logged-in user state
 │   │   └── styles.css             Design system and responsive layout
 │   └── vite.config.js             Dev server with /api proxy
-├── infrastructure/
-│   ├── cloudformation.yml         DynamoDB, ECR, IAM roles, Elastic Beanstalk, GitHub OIDC role
-│   ├── deploy-stack.sh            Creates/updates the stack
-│   └── destroy-stack.sh           Deletes everything after evaluation
 ├── docs/                          Guides, report outline, presentation and viva preparation
 ├── Dockerfile                     Multi-stage production image
 ├── docker-compose.yml             App + DynamoDB Local for local testing
+├── render.yaml                    Render Blueprint (Docker web service, env vars, health check)
 ├── .dockerignore / .gitignore
 └── .env.example                   JWT_SECRET for docker compose
 ```
@@ -114,7 +185,7 @@ cd backend && npm test
 | [docs/API.md](docs/API.md) | REST API reference |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security controls and first-admin creation |
 | [docs/TESTING.md](docs/TESTING.md) | Automated and manual test cases, how to read results |
-| [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) | Beginner AWS + GitHub OIDC deployment guide, costs, monitoring, cleanup |
+| [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md) | Render + GitHub Actions deployment guide, environment variables, limitations, troubleshooting |
 | [docs/PROJECT_REPORT_OUTLINE.md](docs/PROJECT_REPORT_OUTLINE.md) | Report outline and evidence to capture |
 | [docs/PRESENTATION_AND_VIVA.md](docs/PRESENTATION_AND_VIVA.md) | 5-minute script, demo plan, technology explanations, viva Q&A |
 
@@ -124,11 +195,12 @@ What has been verified while building this repository, and what you must verify 
 
 | Item | Status |
 | --- | --- |
-| Backend automated tests (67 tests, ~93% line coverage) | Passed locally (Node 22) |
+| Backend automated tests (73 tests) | Passed locally (Node 22) |
 | Frontend production build | Passed locally |
 | Docker image build and container smoke test | Passed locally |
-| Docker Compose with DynamoDB Local (real DynamoDB code path, GSIs), data persisting after `docker compose down`/`up` | Passed locally |
+| Container run with Render's settings (`PORT=10000`, `RENDER_GIT_COMMIT`, secure cookies, admin from env vars) | Passed locally |
+| Docker Compose with DynamoDB Local, data persisting after `docker compose down`/`up` | Passed locally |
 | Browser walkthrough (register, submit, filter, admin update, mobile layout) | Passed locally with headless Chromium |
-| CloudFormation template | Passes `cfn-lint`; **not yet deployed to a real AWS account** |
-| GitHub Actions workflow | Passes `actionlint`; CI jobs will run on your first push; the deploy job runs **only after** you complete [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) |
-| Live AWS deployment | **Not performed.** Capture your own evidence (see the report outline) |
+| GitHub Actions CI jobs | Passed on GitHub (run #1, before the Render change) |
+| `render.yaml` and deploy job | Workflow passes `actionlint`; **not yet run against a real Render account** |
+| Live Render deployment | **Not performed.** Follow [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md) and capture your own evidence |

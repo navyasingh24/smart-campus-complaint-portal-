@@ -1,6 +1,6 @@
 # Project Report Outline
 
-**Title:** Smart Campus Complaint Management System with AWS Cloud Automation and CI/CD
+**Title:** Smart Campus Complaint Management System with Docker, CI/CD and Cloud Deployment
 
 Suggested length: 40–60 pages. Section numbers below are a suggestion; follow your
 university's template where it differs. Text in *italics* is guidance for you to
@@ -9,15 +9,15 @@ replace with your own writing.
 ---
 
 **Front matter:** title page, certificate, declaration, acknowledgement, table of
-contents, list of figures, list of tables, abbreviations (API, AWS, CI/CD, CORS,
-CSRF, EB, ECR, GSI, IAM, IMDS, JWT, OIDC, RBAC, SDK, STS, XSS).
+contents, list of figures, list of tables, abbreviations (API, CI/CD, CORS,
+CSRF, GSI, HSTS, HTTPS, JWT, PaaS, RBAC, SDK, TLS, XSS).
 
 ## Abstract (≈250 words)
 *Problem (campus complaints handled informally, lost, untracked) → solution (web
 portal with role-based dashboards) → technologies (React, Node.js/Express,
-DynamoDB, Docker, GitHub Actions, Elastic Beanstalk, CloudWatch) → automation
-(every push tested, containerised and deployed with OIDC, verified by health
-checks) → results (state only what you measured: number of tests passing,
+Docker, GitHub Actions, Render) → automation (every push tested and
+containerised; only passing commits deployed through a secret deploy hook and
+verified by health checks) → results (state only what you measured: number of tests passing,
 deployment time from your Actions runs, etc.).*
 
 ## 1. Introduction
@@ -35,10 +35,10 @@ deployment of software is slow and error-prone.*
 1. Let students register, submit categorised complaints and track their status.
 2. Let administrators view, filter and update complaints and see statistics.
 3. Enforce authentication and role-based authorization on the server.
-4. Store data in a managed cloud database (DynamoDB).
+4. Store data through a database adapter layer (JSON-file store in deployment; DynamoDB adapter designed and tested).
 5. Package the application with Docker.
-6. Automate testing and deployment with GitHub Actions and AWS (CI/CD).
-7. Provide health checks and centralised logs (CloudWatch).
+6. Automate testing and deployment with GitHub Actions and Render (CI/CD).
+7. Provide health checks and centralised logs (Render Logs).
 
 ## 4. Existing System and Limitations
 Paper registers / email / generic forms (e.g. Google Forms): no status tracking,
@@ -67,7 +67,7 @@ controls), performance (indexed queries, no scans), availability and
 observability (health checks, logs), maintainability (tests, adapters),
 portability (Docker), usability (responsive UI), cost (single instance, on-demand).
 
-6.3 Hardware/software requirements (development machine, browsers, AWS services).
+6.3 Hardware/software requirements (development machine, browsers, Docker, Render free plan).
 
 ## 7. Technology Stack
 One short subsection per technology, explaining *what it is* and *why it was
@@ -94,18 +94,22 @@ logger, Dockerfile, workflow deploy step. UI screenshots of every page.
 ## 12. CI/CD Workflow
 12.1 CI vs CD definitions. 12.2 Pipeline diagram (jobs and conditions).
 12.3 Step-by-step explanation of `.github/workflows/ci-cd.yml`.
-12.4 OIDC authentication flow diagram (GitHub → STS → temporary credentials).
+12.4 Deployment trigger diagram (tests pass → deploy hook secret → Render build → health check for the new commit).
 12.5 Evidence: screenshots of a green run, a failing-test run, the deployment summary.
 12.6 Measured timings from *your* runs (duration of each job).
 
-## 13. AWS Cloud Architecture and Deployment
-Services used and their roles; IAM roles and policies (least privilege discussion);
-CloudFormation stack; Elastic Beanstalk configuration; logging and monitoring setup;
-cost analysis (billable resources table from `docs/AWS_DEPLOYMENT.md` §0 with *your* Cost Explorer figures).
+## 13. Cloud Deployment on Render
+Why Render (Docker support, HTTPS, free plan without a credit card; the AWS
+account could not be verified); the `render.yaml` Blueprint (infrastructure as
+code); environment variables and secrets handling; health checks and zero-downtime
+switch-over; logs and deploy history; **free-plan limitations** (spin-down, no
+persistent disk, data reset) and how they were handled (admin bootstrap from
+environment variables); paths to production (persistent disk, managed database).
+Use `docs/RENDER_DEPLOYMENT.md`.
 
 ## 14. Testing
-Methodology (unit/integration, mocked AWS, smoke, post-deployment, manual);
-test case table T01–T50 and M01–M12 with **actual** results from your runs; coverage
+Methodology (unit/integration, mocked DynamoDB SDK, smoke, post-deployment, manual);
+test case table T01–T52 and M01–M12 with **actual** results from your runs; coverage
 summary; screenshots of the terminal output and the coverage report.
 
 ## 15. Results
@@ -133,14 +137,14 @@ Use your university's citation style. Official documentation used:
 6. Supertest — https://github.com/ladjs/supertest
 7. Docker documentation (Dockerfile reference, multi-stage builds) — https://docs.docker.com/
 8. GitHub Actions documentation — https://docs.github.com/en/actions
-9. GitHub: Configuring OpenID Connect in AWS — https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
-10. AWS Elastic Beanstalk Developer Guide — https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/
-11. Amazon DynamoDB Developer Guide — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/
-12. AWS IAM User Guide (roles, OIDC providers) — https://docs.aws.amazon.com/IAM/latest/UserGuide/
-13. Amazon ECR User Guide — https://docs.aws.amazon.com/AmazonECR/latest/userguide/
-14. Amazon CloudWatch Logs User Guide — https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/
-15. AWS CloudFormation User Guide — https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/
-16. AWS SDK for JavaScript v3 — https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/
+9. GitHub Actions: using secrets — https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions
+10. GitHub Actions: deployment environments — https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment
+11. Render: Docker — https://render.com/docs/docker
+12. Render: Blueprint YAML reference — https://render.com/docs/blueprint-spec
+13. Render: Deploy hooks — https://render.com/docs/deploy-hooks
+14. Render: Free instances — https://render.com/docs/free
+15. Render: Health checks — https://render.com/docs/health-checks
+16. Amazon DynamoDB Developer Guide (adapter design) — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/
 17. OWASP Top 10 — https://owasp.org/www-project-top-ten/
 18. OWASP Cheat Sheets (Authentication, Session Management, CSRF) — https://cheatsheetseries.owasp.org/
 
@@ -161,7 +165,7 @@ examiners usually value.
 6. Admin dashboard: summary cards and both charts.
 7. Admin "Manage" panel updating a status with a note; success message.
 8. Student view showing the updated status and admin note.
-9. Browser address bar showing the **Elastic Beanstalk URL** with the app loaded.
+9. Browser address bar showing the **Render URL** (`https://…onrender.com`, padlock visible) with the app loaded.
 10. `/api/health` and `/api/health/ready` responses in the browser (live URL).
 
 **Testing**
@@ -179,20 +183,18 @@ examiners usually value.
 **CI/CD**
 19. GitHub Actions run graph with all three jobs green.
 20. Expanded "Run backend tests" step; expanded "Smoke test the container" step.
-21. Deploy job: "Get temporary AWS credentials (OIDC)" step (no secrets used).
-22. Deploy job summary with URL and version.
-23. Repository variables page (values are not secret, but you may blur the account ID).
+21. Deploy job: "Trigger deployment on Render" and "Wait for the new version to go live" steps (the hook URL appears masked as `***`).
+22. Deploy job summary with URL and commit.
+23. Secrets and variables page showing `RENDER_DEPLOY_HOOK_URL` (value hidden) and `RENDER_APP_URL`.
 24. `production` environment with branch restriction.
 25. A code change → merged PR → automatic deployment → changed page live.
 
-**AWS**
-26. CloudFormation stack `CREATE_COMPLETE` with its resources and outputs.
-27. Elastic Beanstalk environment dashboard: Health Ok, running version label = commit.
-28. Application versions list.
-29. ECR repository with images tagged by commit SHA (and scan results).
-30. DynamoDB tables, the two indexes, and "Explore items" showing stored complaints (hide password hashes or explain they are hashes).
-31. IAM roles: instance role inline policy; deploy role trust policy showing the repo/environment condition.
-32. CloudWatch log groups; a Logs Insights query result for `request completed`.
-33. Elastic Beanstalk Monitoring tab graphs.
-34. AWS Budgets alert configuration; Cost Explorer for the project period.
-35. After cleanup: empty Beanstalk/EC2 consoles and the deleted stack.
+**Render**
+26. Blueprint / service overview: Docker runtime, Free plan, region, status **Live**.
+27. Environment tab (blur `ADMIN_EMAIL`; secrets are hidden by Render).
+28. Settings: Health Check Path `/api/health`, Auto-Deploy **Off**, Deploy Hook section (do not reveal the URL).
+29. Events: deploy history with commit SHAs matching your GitHub commits.
+30. Logs: JSON log lines, e.g. `server started` with the version and `complaint status updated`.
+31. Logs showing `bootstrap administrator created` after a restart (evidence of the free-plan data reset and how it is handled).
+32. Metrics tab, if available on your plan.
+33. After cleanup: the deleted service.

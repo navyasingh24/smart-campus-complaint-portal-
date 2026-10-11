@@ -1,6 +1,6 @@
 # Local Development on macOS
 
-Everything in this guide works **without an AWS account**.
+Everything in this guide works **without any cloud account**. Deployment to Render is covered in [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md).
 
 ## 1. Install the required software
 
@@ -8,9 +8,9 @@ Everything in this guide works **without an AWS account**.
    ```bash
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
-2. **Git, Node.js and the AWS CLI:**
+2. **Git and Node.js:**
    ```bash
-   brew install git node@24 awscli
+   brew install git node@24
    brew link --overwrite node@24
    node -v    # must print v22.x or newer (v24 recommended)
    npm -v
@@ -43,7 +43,7 @@ Local and production configuration are kept apart:
 | `backend/.env.example` | Template for local backend settings | Yes |
 | `backend/.env` | Your local backend settings (`DB_DRIVER=local`, `COOKIE_SECURE=false`) | **No** (git-ignored) |
 | `.env.example` / `.env` | `JWT_SECRET` for `docker compose` | Template only |
-| Elastic Beanstalk environment properties | Production settings (`DB_DRIVER=dynamodb`, table names, secret) | Set by CloudFormation, never in Git |
+| Render environment variables (`render.yaml` + dashboard) | Production settings (`COOKIE_SECURE=true`, generated `JWT_SECRET`, admin email/password) | Set in Render, never in Git |
 
 ```bash
 cd backend
@@ -134,7 +134,7 @@ docker run --rm -p 8080:8080 \
 Open http://localhost:8080 (Express now serves the built React app). Stop with
 `Ctrl+C`. The named volume `smart-campus-data` keeps the data.
 
-### Option B: Docker Compose with DynamoDB Local (closest to AWS)
+### Option B: Docker Compose with DynamoDB Local (tests the DynamoDB adapter)
 
 ```bash
 cd ~/projects/smart-campus-complaint-portal

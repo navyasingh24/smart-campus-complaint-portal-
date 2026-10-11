@@ -1,7 +1,7 @@
 // Creates the DynamoDB tables if they do not already exist.
 //
-// Intended for DynamoDB Local (docker compose). On AWS the tables are created
-// by infrastructure/cloudformation.yml, which is the recommended approach.
+// Intended for DynamoDB Local (docker compose). It also works against AWS when
+// AWS credentials are configured, since table creation is idempotent.
 
 const {
   DynamoDBClient,
