@@ -39,7 +39,7 @@ function StatusEditor({ complaint, onSaved }) {
         </select>
       </label>
       <label className="grow">
-        Note to student <span className="optional">(optional)</span>
+        <span>Note to student <span className="optional">(optional)</span></span>
         <input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
       </label>
       <button type="button" className="btn btn-primary" disabled={saving || unchanged} onClick={save}>
