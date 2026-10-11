@@ -1,5 +1,5 @@
 // DynamoDB table definitions. These are used by scripts/create-tables.js for
-// DynamoDB Local, and mirror infrastructure/cloudformation.yml for AWS.
+// DynamoDB Local, and can be used to create the same tables on AWS.
 //
 // Users table
 //   Partition key: email (string). Login looks users up by email, and a

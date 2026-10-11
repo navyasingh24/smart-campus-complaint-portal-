@@ -5,14 +5,14 @@
 #     2. docker  - build the Docker image and smoke-test the running container
 #
 #   CD (continuous deployment) runs only for pushes to main, after CI passed,
-#   and only once AWS has been configured (repository variable AWS_ROLE_ARN):
-#     3. deploy  - push the tested image to Amazon ECR, deploy it to Elastic
-#                  Beanstalk and verify the live health-check endpoints.
+#   and only once Render has been configured:
+#     3. deploy  - call the Render deploy hook, wait until the live site reports
+#                  the new commit on /api/health, then check readiness.
 #
-# Required repository variables (Settings > Secrets and variables > Actions >
-# Variables): AWS_REGION, AWS_ROLE_ARN, EB_APPLICATION_NAME,
-# EB_ENVIRONMENT_NAME, ECR_REPOSITORY. No AWS secrets are stored in GitHub:
-# the deploy job uses OpenID Connect (OIDC) to get temporary credentials.
+# Required configuration (Settings > Secrets and variables > Actions):
+#   Secret   RENDER_DEPLOY_HOOK_URL  - from Render > service > Settings > Deploy Hook
+#   Variable RENDER_APP_URL          - e.g. https://smart-campus-complaint-portal.onrender.com
+# The deploy hook URL is a secret: anyone who has it can trigger a deploy.
 
 name: CI/CD
 
@@ -121,160 +121,64 @@ jobs:
         if: always()
         run: docker logs smoke || true
 
-      - name: Save image for the deploy job
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
-        run: docker save "scc-app:${GITHUB_SHA}" | gzip > image.tar.gz
-
-      - name: Upload image artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: image.tar.gz
-          retention-days: 1
-
       - name: Explain why deployment is skipped
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN == ''
-        run: echo "::notice::CI passed. Deployment skipped because the AWS_ROLE_ARN repository variable is not set (see docs/AWS_DEPLOYMENT.md)."
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL == ''
+        run: echo "::notice::CI passed. Deployment skipped because the RENDER_APP_URL repository variable is not set (see docs/RENDER_DEPLOYMENT.md)."
 
   deploy:
-    name: "CD: deploy to AWS Elastic Beanstalk"
+    name: "CD: deploy to Render"
     needs: docker
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
       name: production
-      url: ${{ steps.verify.outputs.url }}
-    permissions:
-      id-token: write # required to request the OIDC token for AWS
-      contents: read
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      EB_APPLICATION_NAME: ${{ vars.EB_APPLICATION_NAME }}
-      EB_ENVIRONMENT_NAME: ${{ vars.EB_ENVIRONMENT_NAME }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      url: ${{ vars.RENDER_APP_URL }}
     steps:
-      - name: Check deployment configuration
+      - name: Trigger deployment on Render
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          missing=0
-          for name in AWS_REGION EB_APPLICATION_NAME EB_ENVIRONMENT_NAME ECR_REPOSITORY; do
-            if [ -z "${!name}" ]; then echo "::error::Repository variable ${name} is not set"; missing=1; fi
-          done
-          exit $missing
-
-      - name: Download tested Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-
-      - name: Load Docker image
-        run: gunzip -c image.tar.gz | docker load
-
-      - name: Get temporary AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          role-session-name: github-deploy-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Log in to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Push image to Amazon ECR
-        id: image
-        run: |
-          IMAGE_URI="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_SHA}"
-          docker tag "scc-app:${GITHUB_SHA}" "${IMAGE_URI}"
-          docker push "${IMAGE_URI}"
-          echo "uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-
-      - name: Create Elastic Beanstalk application version
-        id: version
-        run: |
-          set -euo pipefail
-          VERSION_LABEL="${GITHUB_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          mkdir -p deploy
-          # Dockerrun.aws.json v1 tells Elastic Beanstalk which image to run
-          # and which container port receives traffic.
-          cat > deploy/Dockerrun.aws.json <<JSON
-          {
-            "AWSEBDockerrunVersion": "1",
-            "Image": { "Name": "${{ steps.image.outputs.uri }}", "Update": "true" },
-            "Ports": [ { "ContainerPort": 8080 } ]
-          }
-          JSON
-          (cd deploy && zip -q "../${VERSION_LABEL}.zip" Dockerrun.aws.json)
-
-          BUCKET=$(aws elasticbeanstalk create-storage-location --query S3Bucket --output text)
-          KEY="${EB_APPLICATION_NAME}/${VERSION_LABEL}.zip"
-          aws s3 cp "${VERSION_LABEL}.zip" "s3://${BUCKET}/${KEY}"
-          aws elasticbeanstalk create-application-version \
-            --application-name "${EB_APPLICATION_NAME}" \
-            --version-label "${VERSION_LABEL}" \
-            --description "Commit ${GITHUB_SHA} (run ${GITHUB_RUN_ID})" \
-            --source-bundle "S3Bucket=${BUCKET},S3Key=${KEY}" \
-            --process > /dev/null
-          echo "label=${VERSION_LABEL}" >> "$GITHUB_OUTPUT"
-          echo "Created application version ${VERSION_LABEL}"
-
-      - name: Deploy to Elastic Beanstalk
-        run: |
-          set -euo pipefail
-          aws elasticbeanstalk update-environment \
-            --environment-name "${EB_ENVIRONMENT_NAME}" \
-            --version-label "${{ steps.version.outputs.label }}" > /dev/null
-          echo "Deployment started; waiting for the environment to become Ready ..."
-          for _ in $(seq 1 60); do
-            read -r STATUS HEALTH VERSION < <(aws elasticbeanstalk describe-environments \
-              --environment-names "${EB_ENVIRONMENT_NAME}" \
-              --query "Environments[0].[Status,Health,VersionLabel]" --output text)
-            echo "  status=${STATUS} health=${HEALTH} version=${VERSION}"
-            if [ "${STATUS}" = "Ready" ]; then break; fi
-            sleep 15
-          done
-          if [ "${STATUS}" != "Ready" ]; then
-            echo "::error::Environment did not become Ready within 15 minutes"; exit 1
-          fi
-          if [ "${VERSION}" != "${{ steps.version.outputs.label }}" ]; then
-            echo "::error::Elastic Beanstalk is running version ${VERSION}, expected ${{ steps.version.outputs.label }} (deployment failed or was rolled back)"
+          if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
+            echo "::error::Repository secret RENDER_DEPLOY_HOOK_URL is not set (see docs/RENDER_DEPLOYMENT.md)"
             exit 1
           fi
+          # The response is not printed: it is not needed and keeps logs clean.
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}" -o /dev/null \
+            || { echo "::error::Render rejected the deploy hook request. Check the RENDER_DEPLOY_HOOK_URL secret."; exit 1; }
+          echo "Render deployment requested for commit ${GITHUB_SHA}"
+
+      - name: Wait for the new version to go live
+        env:
+          RENDER_APP_URL: ${{ vars.RENDER_APP_URL }}
+        run: |
+          URL="${RENDER_APP_URL%/}"
+          echo "Render builds the Docker image and starts it; this usually takes 3-10 minutes."
+          for i in $(seq 1 60); do
+            VERSION=$(curl -fsS --max-time 60 "${URL}/api/health" 2>/dev/null | jq -r '.version // empty' || true)
+            if [ "${VERSION}" = "${GITHUB_SHA}" ]; then
+              echo "New version is live: ${VERSION}"
+              exit 0
+            fi
+            echo "  attempt ${i}: live version is '${VERSION:-unreachable}', waiting for ${GITHUB_SHA}"
+            sleep 20
+          done
+          echo "::error::${URL}/api/health did not report ${GITHUB_SHA} within 20 minutes. Check the deploy logs in the Render dashboard."
+          exit 1
 
       - name: Verify the live application
-        id: verify
+        env:
+          RENDER_APP_URL: ${{ vars.RENDER_APP_URL }}
         run: |
           set -euo pipefail
-          CNAME=$(aws elasticbeanstalk describe-environments --environment-names "${EB_ENVIRONMENT_NAME}" \
-            --query "Environments[0].CNAME" --output text)
-          URL="http://${CNAME}"
-          echo "url=${URL}" >> "$GITHUB_OUTPUT"
-          echo "Checking ${URL}/api/health ..."
-          for i in $(seq 1 20); do
-            if curl -fsS --max-time 10 "${URL}/api/health" > health.json \
-              && [ "$(jq -r .version health.json)" = "${GITHUB_SHA}" ]; then
-              echo "Health check passed: $(cat health.json)"
-              break
-            fi
-            echo "  attempt ${i}: not ready yet"; sleep 15
-          done
-          if [ "$(jq -r .version health.json 2>/dev/null)" != "${GITHUB_SHA}" ]; then
-            echo "::error::${URL}/api/health did not report version ${GITHUB_SHA}"; exit 1
-          fi
-          curl -fsS --max-time 10 "${URL}/api/health/ready" \
-            || { echo "::error::Database readiness check failed - check the instance role and table names"; exit 1; }
+          URL="${RENDER_APP_URL%/}"
+          curl -fsS --max-time 30 "${URL}/api/health/ready" \
+            || { echo "::error::Readiness check failed"; exit 1; }
+          curl -fsS --max-time 30 "${URL}/" | grep -q "<div id=\"root\">" \
+            || { echo "::error::The website was not served"; exit 1; }
           echo
           {
             echo "### Deployment successful"
             echo "- URL: ${URL}"
-            echo "- Version: \`${{ steps.version.outputs.label }}\`"
-            echo "- Image: \`${{ steps.image.outputs.uri }}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Show recent Elastic Beanstalk events (on failure)
-        if: failure()
-        run: |
-          aws elasticbeanstalk describe-events --environment-name "${EB_ENVIRONMENT_NAME}" \
-            --max-items 25 --query "Events[].[EventDate,Severity,Message]" --output table || true
-          echo "::error::Deployment failed. See the events above, and the CloudWatch log group /aws/elasticbeanstalk/${EB_ENVIRONMENT_NAME}/var/log/eb-docker/containers/eb-current-app/stdouterr.log"

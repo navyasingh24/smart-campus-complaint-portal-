@@ -9,7 +9,7 @@
 | Persistence tests | Jest + temporary files | The local adapter keeps data across restarts | Locally and in CI |
 | Build checks | Vite, Docker | The frontend compiles; the image builds | CI (`test`, `docker` jobs) |
 | Container smoke test | curl in GitHub Actions | The built image starts, serves the UI, and can register a user and create a complaint | CI (`docker` job) |
-| Post-deployment check | curl in GitHub Actions | AWS serves the new version and can reach DynamoDB | CD (`deploy` job) |
+| Post-deployment check | curl in GitHub Actions | Render serves the new commit on `/api/health`, readiness passes, homepage loads | CD (`deploy` job) |
 | Manual end-to-end | Browser | The complete user journey | You, before the demo |
 
 Tests use an **in-memory database** created fresh for each test file, and the
@@ -32,8 +32,8 @@ PASS tests/admin.test.js
   Administrator operations
     ✓ students are forbidden from all admin endpoints (… ms)
 ...
-Test Suites: 8 passed, 8 total
-Tests:       67 passed, 67 total
+Test Suites: 9 passed, 9 total
+Tests:       73 passed, 73 total
 ```
 
 * `PASS` / `✓`: the expectation held. `FAIL` / `✕`: Jest prints the test name,
@@ -98,6 +98,8 @@ Tests:       67 passed, 67 total
 | T48 | DB: status update | dynamoStore › status updates are conditional… / missing → null | Condition set |
 | T49 | DB: statistics | dynamoStore › statistics are counted from the status index with a small projection | Correct counts, projection |
 | T50 | Admin creation | adminService › creates an administrator with a hashed password / rejects short passwords / refuses to overwrite | ADMIN role, errors |
+| T51 | Admin from environment variables | bootstrapAdmin › does nothing when unset / creates once / weak password reported / student not promoted | skipped / created→exists / failed / unchanged |
+| T52 | Version on Render | bootstrapAdmin › falls back to RENDER_GIT_COMMIT / APP_VERSION takes priority | Correct version string |
 
 ## 4. Manual test cases (run before the demo; record pass/fail with screenshots)
 

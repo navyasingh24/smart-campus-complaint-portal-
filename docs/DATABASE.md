@@ -1,5 +1,11 @@
 # Database Design (Amazon DynamoDB)
 
+> **Which database runs where:** the Render deployment and local development use
+> the built-in JSON-file adapter (`DB_DRIVER=local`), which stores exactly the
+> same item shapes as below. The DynamoDB design and adapter remain part of the
+> project (tested with mocks and with DynamoDB Local via `docker compose`) for a
+> deployment that has a managed database available.
+
 DynamoDB is a key-value / document database. Unlike SQL databases, you design
 tables around the **queries you need**, because efficient reads must use a key
 or an index. A `Scan` reads the whole table and gets slower and more expensive

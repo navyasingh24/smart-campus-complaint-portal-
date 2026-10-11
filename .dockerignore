@@ -10,7 +10,6 @@ backend/tests
 .git
 .github
 docs
-infrastructure
 *.md
 *.zip
 deploy
