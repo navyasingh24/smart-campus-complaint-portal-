@@ -76,10 +76,11 @@ function createApp({ config, store, logger }) {
   const indexFile = path.join(config.staticDir, 'index.html');
   if (fs.existsSync(indexFile)) {
     app.use(express.static(config.staticDir, { index: false, maxAge: '1h' }));
-    // Single-page app: any other GET returns index.html and React Router
+    // Single-page app: any other GET (or HEAD, used by uptime checks) returns
+    // index.html and React Router
     // shows the right page.
     app.use((req, res, next) => {
-      if (req.method !== 'GET') return next();
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       res.setHeader('Cache-Control', 'no-cache');
       return res.sendFile(indexFile);
     });

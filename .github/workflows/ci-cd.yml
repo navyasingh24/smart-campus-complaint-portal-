@@ -4,7 +4,8 @@
 #     1. test    - install dependencies, run backend tests, build the frontend
 #     2. docker  - build the Docker image and smoke-test the running container
 #
-#   CD (continuous deployment) runs only for pushes to main, after CI passed,
+#   CD (continuous deployment) runs only for main (pushes or the manual "Run
+#   workflow" button), after CI passed,
 #   and only once Render has been configured:
 #     3. deploy  - call the Render deploy hook, wait until the live site reports
 #                  the new commit on /api/health, then check readiness.
@@ -122,13 +123,13 @@ jobs:
         run: docker logs smoke || true
 
       - name: Explain why deployment is skipped
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL == ''
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL == ''
         run: echo "::notice::CI passed. Deployment skipped because the RENDER_APP_URL repository variable is not set (see docs/RENDER_DEPLOYMENT.md)."
 
   deploy:
     name: "CD: deploy to Render"
     needs: docker
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL != ''
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:

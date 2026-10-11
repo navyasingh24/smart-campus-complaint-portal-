@@ -136,8 +136,8 @@ Optional: add yourself as a **required reviewer** to approve each deployment
 1. **CI: tests and frontend build** — `npm ci`, all backend tests, frontend build.
 2. **CI: Docker build and smoke test** — builds the image, runs it, checks the
    health endpoints and the homepage, registers a user and creates a complaint.
-3. **CD: deploy to Render** — runs only for pushes to `main`, only when jobs 1 and
-   2 succeeded, and only when `RENDER_APP_URL` is set. It:
+3. **CD: deploy to Render** — runs only on `main` (a push or the **Run workflow**
+   button), only when jobs 1 and 2 succeeded, and only when `RENDER_APP_URL` is set. It:
    * sends a POST request to the deploy hook (Render then builds the `Dockerfile` from `main`);
    * polls `https://<app>/api/health` every 20 seconds (up to 20 minutes) until it
      reports the commit SHA that was just tested;
@@ -222,7 +222,7 @@ The free plan cannot keep data across restarts. Options if you need that:
 | Admin login fails after some time | The free instance restarted and the data was reset. The admin is recreated automatically on start, so check `ADMIN_EMAIL`/`ADMIN_PASSWORD` match what you type |
 | Logged out immediately after login | Opening the site over `http://` with `COOKIE_SECURE=true`. Always use the `https://` URL |
 | Site takes ~1 minute to load | Free instance was spun down; this is normal |
-| GitHub: deploy job skipped | `RENDER_APP_URL` variable not set, or the push was not to `main` |
+| GitHub: deploy job skipped | `RENDER_APP_URL` is missing, was added as a *secret* instead of a *variable*, or was added inside the `production` environment instead of as a **repository** variable (Settings → Secrets and variables → Actions → **Variables** tab → *Repository variables*); or the run was not on `main` |
 | GitHub: "RENDER_DEPLOY_HOOK_URL is not set" | Add the secret (§4.2). Secret names are case-sensitive |
 | GitHub: "Render rejected the deploy hook request" | Wrong or regenerated hook URL; copy it again |
 | GitHub: "did not report <sha> within 20 minutes" | Build or start failed on Render (see Render → Events/Logs), or a newer commit was deployed first |
