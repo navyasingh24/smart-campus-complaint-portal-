@@ -15,3 +15,8 @@ docs
 deploy
 docker-compose.yml
 .DS_Store
+# CI/IaC files are not needed inside the application image
+Jenkinsfile
+jenkins
+terraform
+render.yaml

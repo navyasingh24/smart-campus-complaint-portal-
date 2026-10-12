@@ -11,3 +11,15 @@ deploy/
 .DS_Store
 .vscode/
 .idea/
+
+# Terraform: state (may contain sensitive values), plans, local overrides
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+tfplan.txt
+terraform.tfvars
+*.auto.tfvars
+crash.log
+.terraform.tfstate.lock.info

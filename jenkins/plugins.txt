@@ -1,0 +1,8 @@
+# Plugins installed into the Jenkins image (jenkins-plugin-cli resolves the
+# latest compatible versions and their dependencies).
+workflow-aggregator
+git
+github
+credentials-binding
+pipeline-stage-view
+timestamper
