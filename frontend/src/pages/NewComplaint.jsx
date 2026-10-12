@@ -69,7 +69,7 @@ export default function NewComplaint() {
         </label>
 
         <label>
-          Location <span className="optional">(optional)</span>
+          <span>Location <span className="optional">(optional)</span></span>
           <input value={form.location} onChange={set('location')} maxLength={120} placeholder="e.g. Block B, Room 204" />
           {fieldErrors.location && <span className="field-error">{fieldErrors.location}</span>}
         </label>

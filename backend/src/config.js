@@ -58,7 +58,7 @@ function loadConfig(env = process.env) {
     cookieSecure: toBool(env.COOKIE_SECURE, isProduction),
     corsOrigins: toList(env.CORS_ORIGINS),
     authRateLimitMax: Number.parseInt(env.AUTH_RATE_LIMIT_MAX || (isTest ? '1000' : '20'), 10),
-    staticDir: env.STATIC_DIR || path.join(__dirname, '..', 'public'),
+    staticDir: path.resolve(env.STATIC_DIR || path.join(__dirname, '..', 'public')),
     db: {
       driver: dbDriver,
       localFile:

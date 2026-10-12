@@ -46,9 +46,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-      <footer className="footer">
-        Smart Campus Complaint Management System · Final-year project
-      </footer>
     </>
   );
 }
