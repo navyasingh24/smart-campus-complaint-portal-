@@ -4,15 +4,20 @@
 #     1. test    - install dependencies, run backend tests, build the frontend
 #     2. docker  - build the Docker image and smoke-test the running container
 #
+#     3. terraform - terraform fmt -check, init (no backend) and validate
+#
 #   CD (continuous deployment) runs only for main (pushes or the manual "Run
-#   workflow" button), after CI passed,
-#   and only once Render has been configured:
-#     3. deploy  - call the Render deploy hook, wait until the live site reports
+#   workflow" button), after CI passed, only once Render has been configured,
+#   and only while GitHub Actions is the selected deployer (DEPLOY_MODE):
+#     4. deploy  - call the Render deploy hook, wait until the live site reports
 #                  the new commit on /api/health, then check readiness.
 #
 # Required configuration (Settings > Secrets and variables > Actions):
 #   Secret   RENDER_DEPLOY_HOOK_URL  - from Render > service > Settings > Deploy Hook
 #   Variable RENDER_APP_URL          - e.g. https://smart-campus-complaint-portal.onrender.com
+#   Variable DEPLOY_MODE (optional)  - "github" (default) or "jenkins". Set it to
+#            "jenkins" when the Jenkinsfile should deploy instead, so the same
+#            commit is never deployed twice.
 # The deploy hook URL is a secret: anyone who has it can trigger a deploy.
 
 name: CI/CD
@@ -126,10 +131,42 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL == ''
         run: echo "::notice::CI passed. Deployment skipped because the RENDER_APP_URL repository variable is not set (see docs/RENDER_DEPLOYMENT.md)."
 
+      - name: Explain that Jenkins deploys
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_MODE == 'jenkins'
+        run: echo "::notice::CI passed. Deployment skipped here because DEPLOY_MODE=jenkins (the Jenkinsfile deploys to Render)."
+
+  terraform:
+    name: "CI: Terraform fmt and validate"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TERRAFORM_VERSION: 1.16.5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Install Terraform
+        run: |
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          unzip -q terraform.zip -d "$RUNNER_TEMP/terraform"
+          echo "$RUNNER_TEMP/terraform" >> "$GITHUB_PATH"
+
+      - name: terraform fmt -check
+        working-directory: terraform
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform init (no backend, no credentials)
+        working-directory: terraform
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        working-directory: terraform
+        run: terraform validate
+
   deploy:
     name: "CD: deploy to Render"
     needs: docker
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL != ''
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.RENDER_APP_URL != '' && vars.DEPLOY_MODE != 'jenkins'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:

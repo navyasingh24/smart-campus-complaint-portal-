@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) for laptop runs, or set
+# TF_VAR_render_service_id in the environment. Jenkins sets it from the
+# RENDER_SERVICE_ID global environment variable.
+render_service_id = "srv-xxxxxxxxxxxxxxxxxxxx"
+
+# Optional overrides (defaults equal the application's built-in defaults):
+# jwt_expires_in      = "8h"
+# auth_rate_limit_max = 20
